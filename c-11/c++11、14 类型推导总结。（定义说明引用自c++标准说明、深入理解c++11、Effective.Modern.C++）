@@ -1,1 +1,76 @@
 
+一：首先理解左值，右值、纯右值、将亡值，通用引用的概念。
+	左值：可以取地址的、有名字的就是左值。（a=b+c,其中可以对a取地址&a，a是一个左值）
+	右值：不能取地址，没有名字的就是右值。（a=b+c,其中不可以对b+c取地址，(b+c)是一个右值）
+	【c++11以后右值拆分两个概念一个是将亡值，一个是纯右值】
+	将亡值：c++11新增的和右值引用相关的表达式，比如右值引用T&&的函数返回值、std::move的返回值、或者转换为T&&的类型转换函数的函数返回值
+	纯右值：（即c++98中右值得概念）运算表达式、临时变量产生的值、类型转换函数的返回值、lambda表达式等 
+    通用引用：【博弈看到T&&不一定就是右值得引用】T&&”的另外一个含义是：既可以是rvalue reference也可以是lvalue reference。这样的
+references在代码中看起来像是rvalue reference（即"T&&"），我把这样的全能称之为Universal Reference。
+二：模板类型推导总结：
+template<typename T>
+void f(ParamType param);
+f(expr); // 从expr推导出T和ParamType的
+1：ParamType is a Reference or Pointer, but not a Universal Reference
+   template<typename T>
+   void f(T& param); // param是一个引用
+  定义：int x = 27; // x是一个int  
+        const int cx = x; // cx是一个const int  
+        const int& rx = x; // rx是const int的引用
+    f(x); // T是int，param的类型时int&
+    f(cx); // T是const int， param的类型是const int&
+    f(rx); // T是const int， param的类型时const int&
+    
+    template<typename T>
+    void f(T* param); // param是一个指针
+    定义：int x = 27; // 和之前一样
+    const int *px = &x; // px是一个指向const int x的指针
+    f(&x); // T是int，param的类型是int*
+    f(px); // T是const int ，param的类型时const int*
+    推导规则：忽略引用类型，推导携带cv属性。
+2：ParamType is a Universal Reference
+    template<typename T>
+    void f(T&& param); // param现在是一个通用的引用
+    
+定义：int x = 27; // 和之前一样
+    const int cx = x; // 和之前一样
+    const int& rx = x; // 和之前一样
+    f(x); // x是左值，所以T是int&， param的类型也是int&
+    f(cx); // cx是左值，所以T是const int&，param的类型也是const int&
+    f(rx); // rx是左值，所以T是const int&， param的类型也是const int&
+    f(27); // 27是右值，所以T是int， 所以param的类型是int&&
+    推导规则：左值均推导为左值得引用类型，cv属性携带。
+    
+    
+3：ParamType is Neither a Pointer nor a Referen
+    template<typename T>
+    void f(T param); // param现在是pass-by-value
+    int x = 27; // 和之前一样
+    const int cx = x; // 和之前一样
+    const int& rx = x; // 和之前一样
+    f(x); // T和param的类型都是int
+    f(cx); // T和param的类型也都是int
+    f(rx); // T和param的类型还都是int
+    推导规则：去引用，去cv限定。
+    
+    const char* const ptr = "Fun with pointers";// ptr是一个const指针，指向一个const对象
+    f(ptr); // 给参数传递的是一个const char * const类型 传递过程中ptr的const特性会被忽略，但是最外层的const限定内容的特性会被推导出来
+
+总结：
+三：理解auto类型推导：
+总结：
+四：理解decltype类型推导
+总结：
+
+五：理解std::move、std::forward
+
+
+
+case1：
+	void f(Widget&& param); //rvalue reference
+	Widget&& var1 = Widget(); //rvalue reference
+	auto&& var2 = var1; //not rvalue reference
+	template<typename T>void f(std::vector<T>&& param) //rvalue referencete
+
+
+
