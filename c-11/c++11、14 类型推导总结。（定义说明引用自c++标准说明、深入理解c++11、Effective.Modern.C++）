@@ -58,12 +58,65 @@ f(expr); // 从expr推导出T和ParamType的
 
 总结：
 三：理解auto类型推导：
+除了一个例外，auto类型推导就是模板类型推导。
+auto 类型推导通常和模板类型推导类似，但是 auto 类型推导假定花括号初始化代表的类型是 std::initializer_list ，但是模板类型推导却不是这样，auto 在函数返回值或者lambda参数里面执行模板的类型推导，而不是通常意义
+的 auto 类型推导。
+使用注意：
+①我们可以使用valatile，pointer（*），reference（&），rvalue reference（&&） 来修饰auto。
+auto k = 5;  
+auto* pK = new auto(k);  
+auto** ppK = new auto(&k);  
+const auto n = 6;  
+②用auto声明的变量必须初始化
+auto m; // m should be intialized 
+③auto不能与其他类型组合连用
+auto int p; // 这是旧auto的做法。  
+④函数和模板参数不能被声明为auto
+void MyFunction(auto parameter){} // no auto as method argument  
+template<auto T> // utter nonsense - not allowed  
+void Fun(T t){}  
+⑤定义在堆上的变量，使用了auto的表达式必须被初始化
+int* p = new auto(0); //fine  
+int* pp = new auto(); // should be initialized  
+auto x = new auto(); // Hmmm ... no intializer  
+auto* y = new auto(9); // Fine. Here y is a int*  
+auto z = new auto(9); //Fine. Here z is a int* (It is not just an int)
+⑥以为auto是一个占位符，并不是一个他自己的类型，因此不能用于类型转换或其他一些操作，如sizeof和typeid
+int value = 123;  
+auto x2 = (auto)value; // no casting using auto  
+auto x3 = static_cast<auto>(value); // same as above   
+⑦定义在一个auto序列的变量必须始终推导成同一类型
+auto x1 = 5, x2 = 5.0, x3='r';  // This is too much....we cannot combine like this  
+⑧auto不能自动推导成CV-qualifiers（constant & volatile qualifiers），除非被声明为引用类型
+const int i = 99;  
+auto j = i;       // j is int, rather than const int  
+j = 100           // Fine. As j is not constant  
+// Now let us try to have reference  
+auto& k = i;      // Now k is const int&  
+k = 100;          // Error. k is constant  
+// Similarly with volatile qualifer
+⑨auto会退化成指向数组的指针，除非被声明为引用
+int a[9];  
+auto j = a;  
+cout<<typeid(j).name()<<endl; // This will print int*  
+auto& k = a;  
+cout<<typeid(k).name()<<endl; // This will print int [9]
 总结：
 四：理解decltype类型推导
+decltype 几乎总是得到一个变量或表达式的类型而不需要任何修改
+对于非变量名的类型为 T 的左值表达式， decltype 总是返回 T&
+C++14 支持 decltype(auto) ，它的行为就像 auto ,从初始化操作来推导类型，但是它推
+导类型时使用 decltype 的规则。
 总结：
 
 五：理解std::move、std::forward
 
+template<typename T> //C++14; still in
+decltype(auto) move(T && param) //namespace std
+{
+using ReturnType = remove_reference_t<T>&&;
+return static_cast<ReturnType>(param);
+}
 
 
 case1：
