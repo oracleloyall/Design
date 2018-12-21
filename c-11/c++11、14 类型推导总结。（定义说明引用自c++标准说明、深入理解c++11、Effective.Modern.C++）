@@ -5,7 +5,7 @@
 	【c++11以后右值拆分两个概念一个是将亡值，一个是纯右值】
 	将亡值：c++11新增的和右值引用相关的表达式，比如右值引用T&&的函数返回值、std::move的返回值、或者转换为T&&的类型转换函数的函数返回值
 	纯右值：（即c++98中右值得概念）运算表达式、临时变量产生的值、类型转换函数的返回值、lambda表达式等 
-    通用引用：【博弈看到T&&不一定就是右值得引用】T&&”的另外一个含义是：既可以是rvalue reference也可以是lvalue reference。这样的
+        通用引用：【博弈看到T&&不一定就是右值得引用】T&&”的另外一个含义是：既可以是rvalue reference也可以是lvalue reference。这样的
 references在代码中看起来像是rvalue reference（即"T&&"），我把这样的全能称之为Universal Reference。
 二：模板类型推导总结：
 template<typename T>
@@ -205,7 +205,6 @@ Widget&& forward(typename std::remove_reference<Widget>::type& param)
 
 【编程实验】不完美转发和完美转发
 
-复制代码
 #include <iostream>
 //#include <utility> //for std::forward
 using namespace std;
@@ -277,7 +276,7 @@ lvalue
 lvalue
 rvalue
 */
-复制代码
+
 3.万能的函数包装器
 
 （1）利用std::forward和可变参数模板实现
@@ -290,7 +289,6 @@ rvalue
 
 【编程实验】万能的函数包装器
 
-复制代码
 #include <iostream>
 using namespace std;
 
@@ -353,7 +351,7 @@ int test2(int x): 1
 string test3(string s1, string s2): aabb
 [](int x, int y){return x + y}: 3
 */
-复制代码
+
 （2）emplace_back减少内存拷贝和移动
 
 　　①emplace_back的实现原理类似于“万能函数包装器”，将参数std::forward转发给元素类的构造函数。实现上，首先为该元素开辟内存空间，然后在这片空间中调用placement new进行初始化，这相当于“就地”(在元素所在内存空间)调用元素对象的构造函数。
@@ -364,7 +362,6 @@ string test3(string s1, string s2): aabb
 
 【编程实验】emplace_back减少内存拷贝和移动
 
-复制代码
 #include <iostream>
 #include <vector>
 
