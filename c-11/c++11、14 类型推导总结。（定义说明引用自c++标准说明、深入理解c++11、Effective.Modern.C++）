@@ -117,7 +117,336 @@ decltype(auto) move(T && param) //namespace std
 using ReturnType = remove_reference_t<T>&&;
 return static_cast<ReturnType>(param);
 }
+1. std::forward原型
 
+复制代码
+template <typename T>
+T&& forward(typename std::remove_reference<T>::type& param) //左值引用版本
+{
+    return static_cast<T&&>(param);
+}
+
+template <typename T>
+T&& forward(typename std::remove_reference<T>::type&& param)  //右值引用版本
+{
+    //param被右值初始化时，T应为右值引用类型，如果T被绑定为左值引用则报错。
+    static_assert(!std::is_lvalue_reference<_Tp>::value, "template argument"  
+    " substituting _Tp is an lvalue reference type"); 
+    
+    return static_cast<T&&>(param);
+}
+
+//其中remove_reference的实现如下
+//1. 特化版本（一般的类）
+template <typename T>
+struct remove_reference 
+{
+    typedef T type;
+};
+
+//2. 左值引用版本
+template <typename T>
+struct remove_reference<T&>
+{
+    typedef T type;
+};
+
+//3. 右值引用版本
+template <typename T>
+struct remove_reference<T&&>
+{
+    typedef T type;
+};
+复制代码
+2. 完美转发（Perfect Forwarding）
+
+（1）完美转发：是指在函数模板中，完全依照模板的参数类型（即保持参数的左值、右值特征），将参数传递给函数模板中调用的另外一个函数。
+
+（2）原理分析
+
+复制代码
+class Widget{};
+
+//完美转发
+template<typename T>
+void func(T&& fparam) //fparam是个Universal引用
+{
+    doSomething(std::forward<T>(fparam));
+}
+
+//1. 假设传入func是一个左值的Widget对象， T被推导为Widget&，则forward如下：
+Widget& && forward(typename std::remove_reference<Widget&>::type& param)
+{
+    return static_cast<Widget& &&>(param);
+}
+//==>引用折叠折后
+Widget& forward(Widget& param)
+{
+    return static_cast<Widget&>(param);
+}
+
+//2. 假设传入func是一个右值的Widget对象， T被推导为Wiget，则forward如下：
+Widget&& forward(typename std::remove_reference<Widget>::type& param)
+{
+    return static_cast<Widget&&>(param);
+}
+复制代码
+（3）std::forward和std::move的联系和区别
+
+　　①std::move是无条件转换，不管它的参数是左值还是右值，都会被强制转换成右值。就其本身而言，它没有move任何东西。
+
+　　②std::forward是有条件转换。只有在它的参数绑定到一个右值时，它才转换它的参数到一个右值。当参数绑定到左值时，转换后仍为左值。
+
+　　③对右值引用使用std::move，对universal引用则使用std::forward
+
+　　④如果局部变量有资格进行RVO优化，不要把std::move或std::forward用在这些局部变量中
+
+　　⑤std::move和std::forward在运行期都没有做任何事情。
+
+【编程实验】不完美转发和完美转发
+
+复制代码
+#include <iostream>
+//#include <utility> //for std::forward
+using namespace std;
+
+void print(const int& t)
+{
+    cout <<"lvalue" << endl;
+}
+
+void print(int&& t)
+{
+    cout <<"rvalue" << endl;
+}
+
+template<typename T>
+void Test(T&& v) //v是Universal引用
+{
+    //不完美转发
+    print(v);  //v具有变量，本身是左值，调用print(int& t)
+    
+    //完美转发
+    print(std::forward<T>(v)); //按v被初始化时的类型转发（左值或右值）
+    
+    //强制将v转为右值
+    print(std::move(v)); //将v强制转为右值，调用print(int&& t)
+}
+
+int main()
+{
+    cout <<"========Test(1)========" << endl; 
+    Test(1); //传入右值
+    
+    int x = 1;
+    cout <<"========Test(x)========" << endl;
+    Test(x); //传入左值
+    
+    cout <<"=====Test(std::forward<int>(1)===" << endl;
+    Test(std::forward<int>(1)); //T为int，以右值方式转发1
+    //Test(std::forward<int&>(1)); //T为int&，需转入左值
+    
+    cout <<"=====Test(std::forward<int>(x))===" << endl;
+    Test(std::forward<int>(x)); //T为int，以右值方式转发x
+    cout <<"=====Test(std::forward<int&>(x))===" << endl;
+    Test(std::forward<int&>(x)); //T为int，以左值方式转发x
+    
+    return 0;
+}
+/*输出结果
+e:\Study\C++11\16>g++ -std=c++11 test2.cpp
+e:\Study\C++11\16>a.exe
+========Test(1)========
+lvalue
+rvalue
+rvalue
+========Test(x)========
+lvalue
+lvalue
+rvalue
+=====Test(std::forward<int>(1)===
+lvalue
+rvalue
+rvalue
+=====Test(std::forward<int>(x))===
+lvalue
+rvalue
+rvalue
+=====Test(std::forward<int&>(x))===
+lvalue
+lvalue
+rvalue
+*/
+复制代码
+3.万能的函数包装器
+
+（1）利用std::forward和可变参数模板实现
+
+　　①可将带返回值、不带返回值、带参和不带参的函数委托万能的函数包装器执行。
+
+　　②Args&&为Universal引用，因为这里的参数可能被左值或右值初始化。Funciont&&也为Universal引用，如被lambda表达式初始化。
+
+　　③利用std::forward将参数正确地（保持参数的左、右值属性）转发给原函数
+
+【编程实验】万能的函数包装器
+
+复制代码
+#include <iostream>
+using namespace std;
+
+//万能的函数包装器
+//可将带返回值、不带返回值、带参和不带参的函数委托万能的函数包装器执行
+
+//注意：Args&&表示Universal引用，因为这里的参数可能被左值或右值初始化
+//      Funciont&&也为Universal引用，如被lambda表达式初始化
+template<typename Function, class...Args>
+auto FuncWrapper(Function&& func, Args&& ...args)->decltype(func(std::forward<Args>(args)...))
+{
+    return func(std::forward<Args>(args)...);
+}
+
+void test0()
+{
+    cout << "void test0()" << endl;
+}
+
+int test1()
+{
+    return 1;
+}
+
+int test2(int x)
+{
+    return x;
+}
+
+string test3(string s1, string s2)
+{
+    return s1 + s2;
+}
+
+int main()
+{
+    
+    FuncWrapper(test0);
+    
+    cout << "int test1(): "; 
+    cout << FuncWrapper(test1) << endl;
+    
+    cout << "int test2(int x): " ;
+    cout << FuncWrapper(test2, 1) << endl;
+    
+    cout << "string test3(string s1, string s2): ";
+    cout << FuncWrapper(test3, "aa", "bb") << endl;
+    
+    cout << "[](int x, int y){return x + y;}: ";
+    cout << FuncWrapper([](int x, int y){return x + y;}, 1,  2) << endl;
+    
+    return 0;
+}
+/*输出结果：
+e:\Study\C++11\16>g++ -std=c++11 test3.cpp
+e:\Study\C++11\16>a.exe
+void test0()
+int test1(): 1
+int test2(int x): 1
+string test3(string s1, string s2): aabb
+[](int x, int y){return x + y}: 3
+*/
+复制代码
+（2）emplace_back减少内存拷贝和移动
+
+　　①emplace_back的实现原理类似于“万能函数包装器”，将参数std::forward转发给元素类的构造函数。实现上，首先为该元素开辟内存空间，然后在这片空间中调用placement new进行初始化，这相当于“就地”(在元素所在内存空间)调用元素对象的构造函数。
+
+　　②而push_back会先将参数转为相应的元素类型，这需要调用一次构造函数，再将这个临时对象拷贝构造给容器内的元素对象，所以共需要一次构造和一次拷贝构造。从效率上看不如emplace_back，因为后者只需要一次调用一次构造即可。
+
+　　③一般传入emplace_back的是构造函数所对应的参数(也只有这样传参才能节省一次拷贝构造)，所以要求对象有相应的构造函数，如果没有对应的构造函数，则只能用push_back，否则编译会报错。如emplace_back(int, int)，则要求元素对象需要有带两个int型的构造函数。
+
+【编程实验】emplace_back减少内存拷贝和移动
+
+复制代码
+#include <iostream>
+#include <vector>
+
+using namespace std;
+
+class Test
+{
+    int m_a;
+public:
+    static int m_count;
+    
+    Test(int a) : m_a(a)
+    {
+        cout <<"Test(int a)" << endl;
+    }
+    
+    Test(const Test& t) : m_a(t.m_a)
+    {
+        ++m_count;
+        cout << "Test(const Test& t)" << endl;
+    }
+    
+    Test& operator=(const Test& t)
+    {
+        this->m_a = t.m_a;
+        return *this;
+    }
+};
+
+int Test::m_count = 0;
+
+int main()
+{
+    //创建10个值为1的元素
+    Test::m_count = 0;
+    vector<Test> vec(10, 1); //首先将1转为Test(1)，会调用1次Test(int a)。然后，利用Test(1)去拷贝构造10个元素，所以
+                             //调用10次拷贝构造。
+    cout << "vec.capacity():" << vec.capacity() << ", "; //10
+    cout << "vec.size():" << vec.size() <<  endl;        //10,空间己满
+    
+    Test::m_count = 0;
+    vec.push_back(Test(1)); //由于capacity空间己满。首先调用Test(1)，然后再push_back中再拷贝
+                            //构造10个元素（而不是1个，为了效率），所以调用10次拷贝构造
+    cout << "vec.capacity():" << vec.capacity() << ", ";  //20
+    cout << "vec.size():" << vec.size() <<  endl;         //11,空间未满
+    
+    Test::m_count = 0;
+    vec.push_back(1);  //先调用Test(1)，然后调用1次拷贝构造
+    cout << "vec.capacity():" << vec.capacity() << ", "; //20
+    cout << "vec.size():" << vec.size() <<  endl;         //12,空间未满
+    
+    Test::m_count = 0;
+    vec.emplace_back(1); //由于空间未满，直接在第12个元素位置调用placement new初始化那段空间
+                         //所以就会调用构造函数，节省了调用拷贝构造的开销
+    cout << "vec.capacity():" << vec.capacity() << ", "; //20
+    cout << "vec.size():" << vec.size() <<  endl;        //13,空间未满
+    
+    Test::m_count = 0;
+    vec.emplace_back(Test(1)); //先调用Test(1)，再调用拷贝构造（注意与vec.emplace_back(1)之间差异）
+    cout << "vec.capacity():" << vec.capacity() << ", "; //20
+    cout << "vec.size():" << vec.size() <<  endl;        //14,空间未满
+    
+    return 0;
+}
+/*输出结果
+e:\Study\C++11\16>g++ -std=c++11 test4.cpp
+e:\Study\C++11\16>a.exe
+Test(int a)
+...  //中间省略了调用10次Test(const Test& t)
+vec.capacity():10, vec.size():10
+Test(int a)
+...  //中间省略了调用10次Test(const Test& t)
+vec.capacity():20, vec.size():11
+Test(int a)
+Test(const Test& t)
+vec.capacity():20, vec.size():12
+Test(int a)
+vec.capacity():20, vec.size():13
+Test(int a)
+Test(const Test& t)
+vec.capacity():20, vec.size():14
+*/
 
 case1：
 	void f(Widget&& param); //rvalue reference
