@@ -1,0 +1,4 @@
+ iterator_category表示迭代器的分类，共有五类。
+ input_iterator、output_iterator、forward_iterator、bidirectional_iterator、random_access_iterator，
+ 分别是只读、只写、前向移动读写、双向移动读写、随机读写。任何一种迭代器，都属于其中的一种分类。
+ 比如单链表的迭代器属于forward_iterator，链表的迭代器属于  bidirectional_iterator，而双端队列的迭代器属于random_access_iterator。
