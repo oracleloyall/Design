@@ -1,0 +1,167 @@
+
+struct sk_buff {  
+         /* These two members must be first. */  
+         struct sk_buff          *next;  
+         struct sk_buff          *prev;  
+   
+         struct sock             *sk;  
+         struct skb_timeval      tstamp;  
+         struct net_device       *dev;  
+         struct net_device       *input_dev;  
+   
+         union {  
+                 struct tcphdr   *th;  
+                 struct udphdr   *uh;  
+                 struct icmphdr  *icmph;  
+                 struct igmphdr  *igmph;  
+                 struct iphdr    *ipiph;  
+                 struct ipv6hdr  *ipv6h;  
+                 unsigned char   *raw;  
+         } h;  
+   
+         union {  
+                 struct iphdr    *iph;  
+                 struct ipv6hdr  *ipv6h;  
+                 struct arphdr   *arph;  
+                 unsigned char   *raw;  
+         } nh;  
+   
+         union {  
+                 unsigned char   *raw;  
+         } mac;  
+   
+         struct  dst_entry       *dst;  
+         struct  sec_path        *sp;  
+   
+         /* 
+          * This is the control buffer. It is free to use for every 
+          * layer. Please put your private variables there. If you 
+          * want to keep them across layers you have to do a skb_clone() 
+          * first. This is owned by whoever has the skb queued ATM. 
+          */  
+         char                    cb[48];  
+   
+         unsigned int            len,  
+                                 data_len,  
+                                 mac_len,  
+                                 csum;  
+         __u32                   priority;  
+         __u8                    local_df:1,  
+                                 cloned:1,  
+                                 ip_summed:2,  
+                                 nohdr:1,  
+                                 nfctinfo:3;  
+         __u8                    pkt_type:3,  
+                                 fclone:2,  
+                                 ipvs_property:1;  
+         __be16                  protocol;  
+   
+         void                    (*destructor)(struct sk_buff *skb);  
+#ifdef CONFIG_NETFILTER  
+         __u32                   nfmark;  
+         struct nf_conntrack     *nfct;  
+#if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)  
+         struct sk_buff          *nfct_reasm;  
+#endif  
+#ifdef CONFIG_BRIDGE_NETFILTER  
+         struct nf_bridge_info   *nf_bridge;  
+#endif  
+#endif /* CONFIG_NETFILTER */  
+#ifdef CONFIG_NET_SCHED  
+         __u16                   tc_index;       /* traffic control index */  
+#ifdef CONFIG_NET_CLS_ACT  
+         __u16                   tc_verd;        /* traffic control verdict */  
+#endif  
+#endif  
+   
+   
+         /* These elements must be at the end, see alloc_skb() for details.  */  
+         unsigned int            truesize;  
+         atomic_t                users;  
+         unsigned char           *head,  
+                                 *data,  
+                                 *tail,  
+                                 *end;  
+};  
+
+> : next和prev，这两个域是用来连接相关的skb的(例如如果有分片，将这些分片连接在一起可以)
+
+> : sk，指向报文所属的套接字指针
+
+> : tstamp，记录接收或者传输报文的时间戳
+
+> : dev和input_dev，记录接收或者发送的设备
+
+>: union u，对于一个层次，例如tcp层，可能有很多不同的协议，他们的协议头不一样，那么这个联合体就是记录这些协议头的。
+
+     此处u就是代表传输层
+
+> : union nh，代表网络层头
+
+> : union mac，代表链路层头
+
+> : dst，指向des_entry结构，记录了到达目的地的路由信息，以及其他的一些网络特征信息。
+
+> : sp：安全路径，用于xfrm
+
+> : cb[]，保存与协议相关的控制信息，每个协议可能独立使用这些信息。
+
+> : 重要的字段 len 和 data_len：
+
+      len代: 表整个数据区域的长度！这里要提前解释几个定义，skb的组成是有sk_buff控制 + 线性数据 + 非线性数据 
+
+      (skb_shared_info) 组成！
+
+     后面会具体解释是什么意思！在sk_buff这个里面没有实际的数据，这里仅仅是控制信息，数据是通过后面的data指针指向其他内
+
+     存块的！那个内存块中是线性数据和
+
+     非线性数据！那么len就是length(线性数据) + length(非线性数据)！！！
+
+     data_len: 指的是length(非线性数据)！！！那么可以知道：length(线性数据) =  skb->len - skb->data_len
+
+> : mac_len，指的是mac头长度
+
+> : csum，某时刻协议的校验和
+
+> : priority，报文排队优先级，取决于ip中的tos域
+
+> : local_df，允许在本地分配
+
+> : cloned，保存当前的skb_buff是克隆的还是原始数据
+
+> : ip_summed，是否计算ip校验和
+
+> : nohdr，仅仅引用数据区域
+
+> : pkt_type，报文类型，例如广播，多播，回环，本机，传出...
+
+> : fclone，skb_buff克隆状态
+
+> : ipvs_property，skb_buff是否属于ipvs
+
+> : protocal，协议信息
+
+> : nfmark，用于钩子之间通信
+
+> : nfct_reasm，netfilter的跟踪连接重新组装指针
+
+> : nf_bridge，保存桥接信息
+
+> : tc_index: Traffic control index，tc_verd: traffic control verdict
+
+> : truesize，该缓冲区分配的所有总的内存，包括：skb_buff + 所有数据大小
+
+> : users，保存引用skb_buff的数量
+
+> : 重要数据字段：head，data，tail，end！！！
+
+    head：指向分配给的线性数据内存首地址( 建立起一个观念：并不是分配这么多内存，就都能被使用作为数据存储，可能没这么多
+
+    数据也有可能！但是也不要认为分配这么多 就足够了，也不一定(非线性数据就是例子) )
+
+    data：指向保存数据内容的首地址！我们由head可以知道，head和data不一定就是指在同一个位置！！！
+
+    tail：指向数据的结尾！
+
+    end：指向分配的内存块的结尾！ ( 由上面我们知道数据结尾 != 分配的内存块的结尾 )
